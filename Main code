@@ -1,0 +1,84 @@
+// Libraries needed: MD_Parola by MajicDesigns, MD_MAX72XX by MajicDesigns
+// ⚠️ If you have ArduinoGraphics or Arduino_LED_Matrix installed, this may conflict.
+// Fix: Comment out or uninstall those libraries, or isolate this project in its own sketch folder.
+
+#include <MD_Parola.h>
+#include <MD_MAX72XX.h>
+#include <SPI.h>
+
+// ── Pin Definitions ──────────────────────────────────────────────
+const int TOUCH_PIN  = 2;   // TTP223 SIG → D2
+const int BUTTON_PIN = 3;   // Push button → D3 (uses internal pull-up)
+const int CS_PIN     = 10;  // MAX7219 CS → D10
+
+// ── Display Setup ────────────────────────────────────────────────
+#define HARDWARE_TYPE MD_MAX72XX::FC16_HW
+#define MAX_DEVICES   1
+
+MD_Parola display = MD_Parola(HARDWARE_TYPE, CS_PIN, MAX_DEVICES);
+
+// ── State Tracking ───────────────────────────────────────────────
+// TTP223 is active-LOW: HIGH = not touched, LOW = touched
+int lastTouchState  = HIGH;
+int lastButtonState = HIGH;
+
+// Track what's currently displayed so we don't restart animations
+String currentMessage = "";
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("System starting...");
+
+  // Set pin modes
+  pinMode(TOUCH_PIN, INPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP); // Internal pull-up for button
+
+  // Start the display
+  display.begin();
+  display.setIntensity(5);       // Brightness: 0 (dim) to 15 (bright)
+  display.setTextAlignment(PA_CENTER);
+
+  showMessage("READY");
+  Serial.println("Ready!");
+}
+
+void loop() {
+  // Read current states
+  int touchState  = digitalRead(TOUCH_PIN);
+  int buttonState = digitalRead(BUTTON_PIN);
+
+  // ── Check Touch Sensor (active-LOW) ──────────────────────────
+  if (touchState == LOW && lastTouchState == HIGH) {
+    // Finger just placed on sensor
+    Serial.println("Touch detected!");
+    showMessage("TOUCH!");
+  }
+
+  // ── Check Push Button (active-LOW via pull-up) ────────────────
+  if (buttonState == LOW && lastButtonState == HIGH) {
+    // Button just pressed
+    Serial.println("Button pressed!");
+    showMessage("PRESS!");
+  }
+
+  // ── Return to READY when both released ───────────────────────
+  if (touchState == HIGH && buttonState == HIGH && currentMessage != "READY") {
+    Serial.println("Returning to READY");
+    showMessage("READY");
+  }
+
+  // Save states for next loop (edge detection)
+  lastTouchState  = touchState;
+  lastButtonState = buttonState;
+
+  // Keep the display animation running
+  display.displayAnimate();
+  delay(10); // Small delay to debounce
+}
+
+// ── Helper: Show a message on the dot matrix ─────────────────────
+void showMessage(String msg) {
+  currentMessage = msg;
+  display.displayClear();
+  display.displayScroll(msg.c_str(), PA_LEFT, PA_SCROLL_LEFT, 80);
+}
